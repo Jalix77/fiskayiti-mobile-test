@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FiskAyiti — Test mobile Supabase</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--blue:#0b4f8a;--green:#12805c;--bg:#f4f7fa}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Arial;background:var(--bg);color:#17202a}
+header{background:var(--blue);color:#fff;padding:16px}h1{margin:0;font-size:20px}p{margin:4px 0 0;font-size:13px;opacity:.9}
+main{padding:12px;max-width:640px;margin:auto}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+h2{margin:0 0 8px;font-size:16px;color:var(--blue)}
+label{display:block;font-size:12px;font-weight:700;margin:8px 0 3px}
+input,select{width:100%;padding:11px;border:1px solid #cfd8dc;border-radius:9px;font-size:16px}
+button{width:100%;padding:13px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-size:16px;font-weight:700;margin-top:10px}
+button.green{background:var(--green)}
+button.secondary{background:#e8eef3;color:#123}
+.hidden{display:none}
+.result{background:#eef7f2;border:1px solid #cbe5d8;border-radius:10px;padding:10px;margin-top:10px;font-size:14px}
+.error{background:#fdecea;border:1px solid #f5c6c2;border-radius:10px;padding:10px;margin-top:10px;font-size:14px;color:#8a1c12}
+.small{font-size:12px;color:#546e7a}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}td,th{padding:6px;border-bottom:1px solid #e3e8ec;text-align:left}
+</style>
+</head>
+<body>
+<header><h1>FiskAyiti</h1><p>Test mobile connecté à Supabase</p></header>
+<main>
+
+<div id="authCard" class="card">
+<h2>Connexion</h2>
+<label>Email</label><input id="email" type="email" placeholder="ton@email.com">
+<label>Mot de passe</label><input id="password" type="password" placeholder="Au moins 8 caractères">
+<button onclick="signUp()">Créer un compte</button>
+<button class="secondary" onclick="signIn()">Se connecter</button>
+<button class="secondary" onclick="signOut()">Se déconnecter</button>
+<div id="authStatus" class="small"></div>
+</div>
+
+<div id="appCard" class="hidden">
+<div class="card">
+<h2>Déclaration définitive</h2>
+<label>Profil</label>
+<select id="profile">
+<option value="employee">Salarié</option>
+<option value="independent">Professionnel indépendant</option>
+<option value="landlord">Propriétaire bailleur</option>
+</select>
+
+<div id="employeeFields">
+<label>Salaire brut annuel (Gdes)</label><input id="salary" type="number" value="0">
+<label>Primes annuelles (Gdes)</label><input id="bonus" type="number" value="0">
+<label>Retenues IRI déjà versées (Gdes)</label><input id="withheld" type="number" value="0">
+</div>
+
+<div id="independentFields" class="hidden">
+<label>Recettes annuelles (Gdes)</label><input id="proRevenue" type="number" value="0">
+<label>Charges déductibles (Gdes)</label><input id="proExpenses" type="number" value="0">
+<label>Retenues déjà versées (Gdes)</label><input id="proWithheld" type="number" value="0">
+</div>
+
+<div id="landlordFields" class="hidden">
+<label>Loyers bruts annuels (Gdes)</label><input id="rentIncome" type="number" value="0">
+<label>Charges admissibles (Gdes)</label><input id="rentExpenses" type="number" value="0">
+<label>Retenues déjà versées (Gdes)</label><input id="rentWithheld" type="number" value="0">
+</div>
+
+<label>Loyer annuel résidence principale (Gdes)</label><input id="rentPaid" type="number" value="0">
+<label>Intérêts hypothécaires (Gdes)</label><input id="mortgage" type="number" value="0">
+<label>Assurance (Gdes)</label><input id="insurance" type="number" value="0">
+<label>Formation (Gdes)</label><input id="training" type="number" value="0">
+<label>Cotisations professionnelles (Gdes)</label><input id="dues" type="number" value="0">
+<label>Dons admissibles (Gdes)</label><input id="donations" type="number" value="0">
+
+<button onclick="calculateIRPP()">Calculer l’IRPP</button>
+<button class="green" onclick="saveDeclaration()">Enregistrer la déclaration</button>
+<div id="irppResult"></div>
+</div>
+
+<div class="card">
+<h2>Patente</h2>
+<label>Nom de l’établissement</label><input id="bizName" value="Mon commerce">
+<label>Commune</label>
+<select id="communeGroup">
+<option value="GROUP_1">Port-au-Prince, Delmas, Pétion-Ville, Tabarre, Carrefour, Cité Soleil, Croix-des-Bouquets</option>
+<option value="GROUP_2">Deuxième groupe</option>
+<option value="OTHER">Autre commune</option>
+</select>
+<label>Chiffre d’affaires net annuel (Gdes)</label><input id="revenue" type="number" value="0">
+<label>Masse salariale annuelle (Gdes)</label><input id="payroll" type="number" value="0">
+<label>Accessoires (Gdes)</label><input id="accessories" type="number" value="0">
+<button onclick="calculatePatente()">Calculer la patente</button>
+<button class="green" onclick="savePatente()">Enregistrer le calcul</button>
+<div id="patenteResult"></div>
+</div>
+</div>
+
+</main>
+
+<script>
+const SUPABASE_URL = "https://jqnlxrnvlrqhxsfywruu.supabase.co";
+const SUPABASE_KEY = "sb_publishable_QUEAwlymwevDp455KgOzLg_sNzEdPYK";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let lastIRPP = null;
+let lastPatente = null;
+
+const g = n => (Number(n)||0).toLocaleString("fr-FR") + " Gdes";
+const val = id => Number(document.getElementById(id).value || 0);
+
+function show(id, visible){ document.getElementById(id).classList.toggle("hidden", !visible); }
+function setStatus(id, text, isError=false){
+  const el=document.getElementById(id);
+  el.className = isError ? "error" : "result";
+  el.innerHTML = text;
+}
+
+function toggleProfile(){
+  const p=document.getElementById("profile").value;
+  show("employeeFields", p==="employee");
+  show("independentFields", p==="independent");
+  show("landlordFields", p==="landlord");
+}
+document.getElementById("profile").addEventListener("change", toggleProfile);
+
+async function signUp(){
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if(error) return setStatus("authStatus", error.message, true);
+  setStatus("authStatus", "Compte créé. Vérifie ta boîte email si Supabase demande une confirmation.");
+  await refreshSession();
+}
+
+async function signIn(){
+  const email=document.getElementById("email").value.trim();
+  const password=document.getElementById("password").value;
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if(error) return setStatus("authStatus", error.message, true);
+  await refreshSession();
+}
+
+async function signOut(){
+  await supabase.auth.signOut();
+  currentUser=null;
+  show("appCard", false);
+  setStatus("authStatus", "Déconnecté.");
+}
+
+async function refreshSession(){
+  const { data } = await supabase.auth.getUser();
+  currentUser = data.user;
+  if(currentUser){
+    show("appCard", true);
+    setStatus("authStatus", "Connecté : " + currentUser.email);
+  } else {
+    show("appCard", false);
+  }
+}
+
+function calculateIRPP(){
+  const p=document.getElementById("profile").value;
+  let gross=0, withheld=0;
+  if(p==="employee"){ gross=val("salary")+val("bonus"); withheld=val("withheld"); }
+  if(p==="independent"){ gross=Math.max(0,val("proRevenue")-val("proExpenses")); withheld=val("proWithheld"); }
+  if(p==="landlord"){ gross=Math.max(0,val("rentIncome")-val("rentExpenses")); withheld=val("rentWithheld"); }
+
+  const rentDeduction=Math.min(val("rentPaid"), val("rentPaid")*0.20);
+  const deductions=rentDeduction+val("mortgage")+val("insurance")+val("training")+val("dues")+val("donations");
+  const taxable=Math.max(0,gross-deductions);
+
+  const brackets=[
+    [0,360000,0],[360000,540000,.12],[540000,1080000,.18],[1080000,2160000,.25],[2160000,Infinity,.30]
+  ];
+  let tax=0, remaining=taxable, rows="";
+  for(const [lo,hi,rate] of brackets){
+    if(remaining<=0) break;
+    const amount=Math.min(remaining,hi-lo);
+    const bracketTax=amount*rate;
+    tax+=bracketTax;
+    if(amount>0) rows += `<tr><td>${g(lo+1)} – ${isFinite(hi)?g(hi):"et plus"}</td><td>${rate*100}%</td><td>${g(amount)}</td><td>${g(bracketTax)}</td></tr>`;
+    remaining-=amount;
+  }
+  const finalTax=Math.max(0,tax-withheld);
+  const credit=Math.max(0,withheld-tax);
+  lastIRPP={taxable_income:taxable,gross_tax:tax,withholding_credits:withheld,final_tax:finalTax,credit_balance:credit};
+
+  setStatus("irppResult", `
+    <b>Revenu imposable :</b> ${g(taxable)}<br>
+    <b>IRPP brut :</b> ${g(tax)}<br>
+    <b>Retenues :</b> ${g(withheld)}<br>
+    <b>${credit>0?"Crédit d’impôt":"Solde à payer"} :</b> ${g(credit>0?credit:finalTax)}
+    <table><tr><th>Tranche</th><th>Taux</th><th>Base</th><th>Impôt</th></tr>${rows}</table>
+  `);
+}
+
+function calculatePatente(){
+  const fixed={GROUP_1:5000,GROUP_2:2500,OTHER:1250}[document.getElementById("communeGroup").value];
+  const base=Math.max(0,val("revenue")-val("payroll"));
+  const roundedBase=Math.floor(base/1000)*1000;
+  const variable=roundedBase*0.004;
+  const accessories=val("accessories");
+  const total=fixed+variable+accessories;
+  lastPatente={commune_group:document.getElementById("communeGroup").value,net_revenue:val("revenue"),payroll:val("payroll"),fixed_right:fixed,variable_base:roundedBase,variable_right:variable,accessories,total_patente:total};
+  setStatus("patenteResult", `
+    <b>Droit fixe :</b> ${g(fixed)}<br>
+    <b>Base variable :</b> ${g(roundedBase)}<br>
+    <b>Droit variable :</b> ${g(variable)}<br>
+    <b>Accessoires :</b> ${g(accessories)}<br>
+    <b>Total patente :</b> ${g(total)}
+  `);
+}
+
+async function saveDeclaration(){
+  if(!currentUser) return setStatus("irppResult","Connecte-toi d’abord.",true);
+  if(!lastIRPP) return setStatus("irppResult","Calcule d’abord l’IRPP.",true);
+
+  const { data: fy, error: fyError } = await supabase.from("fiscal_years").select("id").eq("fiscal_year","2025-2026").single();
+  if(fyError) return setStatus("irppResult","Erreur exercice fiscal : "+fyError.message,true);
+
+  const { data, error } = await supabase.from("declarations").upsert({
+    user_id:currentUser.id,
+    fiscal_year_id:fy.id,
+    taxpayer_type:document.getElementById("profile").value,
+    gross_income:0,
+    total_deductions:0,
+    taxable_income:lastIRPP.taxable_income,
+    gross_tax:lastIRPP.gross_tax,
+    withholding_credits:lastIRPP.withholding_credits,
+    final_tax:lastIRPP.final_tax,
+    credit_balance:lastIRPP.credit_balance,
+    calculation_snapshot:lastIRPP
+  },{ onConflict:"user_id,fiscal_year_id" }).select().single();
+
+  if(error) return setStatus("irppResult","Erreur : "+error.message,true);
+  setStatus("irppResult","Déclaration enregistrée avec l’ID : <b>"+data.id+"</b><br>"+document.getElementById("irppResult").innerHTML);
+}
+
+async function savePatente(){
+  if(!currentUser) return setStatus("patenteResult","Connecte-toi d’abord.",true);
+  if(!lastPatente) return setStatus("patenteResult","Calcule d’abord la patente.",true);
+
+  const { data: fy, error: fyError } = await supabase.from("fiscal_years").select("id").eq("fiscal_year","2025-2026").single();
+  if(fyError) return setStatus("patenteResult","Erreur exercice fiscal : "+fyError.message,true);
+
+  const { data: business, error: bizError } = await supabase.from("businesses").upsert({
+    owner_id:currentUser.id,
+    name:document.getElementById("bizName").value || "Mon commerce"
+  },{ onConflict:"owner_id,name" }).select().single();
+  if(bizError) return setStatus("patenteResult","Erreur entreprise : "+bizError.message,true);
+
+  const { data: establishment, error: estError } = await supabase.from("establishments").upsert({
+    business_id:business.id,
+    name:document.getElementById("bizName").value || "Mon commerce",
+    commune:"Port-au-Prince",
+    commune_group:lastPatente.commune_group,
+    net_revenue:lastPatente.net_revenue,
+    payroll:lastPatente.payroll
+  },{ onConflict:"business_id,name" }).select().single();
+  if(estError) return setStatus("patenteResult","Erreur établissement : "+estError.message,true);
+
+  const { data, error } = await supabase.from("patente_calculations").upsert({
+    user_id:currentUser.id,
+    establishment_id:establishment.id,
+    fiscal_year_id:fy.id,
+    fixed_right:lastPatente.fixed_right,
+    variable_base:lastPatente.variable_base,
+    variable_right:lastPatente.variable_right,
+    accessories:lastPatente.accessories,
+    total_patente:lastPatente.total_patente,
+    calculation_snapshot:lastPatente
+  },{ onConflict:"establishment_id,fiscal_year_id" }).select().single();
+
+  if(error) return setStatus("patenteResult","Erreur : "+error.message,true);
+  setStatus("patenteResult","Patente enregistrée avec l’ID : <b>"+data.id+"</b><br>"+document.getElementById("patenteResult").innerHTML);
+}
+
+refreshSession();
+toggleProfile();
+</script>
+</body>
+</html>
